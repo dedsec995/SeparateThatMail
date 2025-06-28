@@ -24,8 +24,8 @@ def train_and_evaluate_bert(data_path="clean_data.csv", model_name="bert-base-un
         return
 
     # Filter out any rows with empty text if not already handled by cleaning script
-    df = df.dropna(subset=['text'])
-    df = df[df['text'].str.strip() != '']
+    df = df.dropna(subset=['plain_text'])
+    df = df[df['plain_text'].str.strip() != '']
 
     if df.empty:
         print("Error: Dataset is empty after loading/cleaning. Cannot proceed with training.")
@@ -47,8 +47,8 @@ def train_and_evaluate_bert(data_path="clean_data.csv", model_name="bert-base-un
     df['labels'] = df['label'].map(label_to_id)
 
     # Convert pandas DataFrame to Hugging Face Dataset
-    # Hugging Face 'datasets' expects 'text' and 'labels' columns by default for sequence classification
-    hf_dataset = Dataset.from_pandas(df[['text', 'labels']])
+    # Hugging Face 'datasets' expects 'plain_text' and 'labels' columns by default for sequence classification
+    hf_dataset = Dataset.from_pandas(df[['plain_text', 'labels']])
 
     # --- 3. Split Dataset into Training and Validation ---
     # Stratify by labels to maintain class distribution in splits
