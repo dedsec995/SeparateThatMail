@@ -3,3 +3,4 @@ credentials.json
 token.json
 *.zip
 data/
+fine_tuned_bert_classifier/
