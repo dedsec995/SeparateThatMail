@@ -31,7 +31,7 @@ def authenticate_gmail_api():
         # Save the credentials for the next run
         with open("token.json", "w") as token:
             token.write(creds.to_json())
-    
+     
     try:
         service = build("gmail", "v1", credentials=creds)
         print("Successfully authenticated with Gmail API.")
@@ -71,33 +71,33 @@ def get_emails_by_label(service, label_name, max_results=500):
     Fetches emails with a specific label and extracts their subject and body.
     """
     email_data = []
-    
+     
     try:
         # First, get the label ID
         results = service.users().labels().list(userId="me").execute()
         labels = results.get("labels", [])
-        
+         
         label_id = None
         for label in labels:
             if label["name"].lower() == label_name.lower():
                 label_id = label["id"]
                 break
-        
+         
         if not label_id:
             print(f"Label '{label_name}' not found in your Gmail account. Please create it.")
             return []
 
         print(f"Fetching emails with label '{label_name}' (ID: {label_id})...")
-        
+         
         # List messages with the given label
         response = service.users().messages().list(
             userId="me", 
             labelIds=[label_id], 
             maxResults=max_results
         ).execute()
-        
+         
         messages = response.get("messages", [])
-        
+         
         if not messages:
             print(f"No messages found with label '{label_name}'.")
             return []
@@ -105,6 +105,63 @@ def get_emails_by_label(service, label_name, max_results=500):
         for i, msg in enumerate(messages):
             if (i + 1) % 50 == 0:
                 print(f"  Processed {i+1}/{len(messages)} emails for '{label_name}'...")
+
+            msg_details = service.users().messages().get(userId="me", id=msg["id"], format="full").execute()
+             
+            payload = msg_details["payload"]
+            headers = payload.get("headers", [])
+             
+            subject = ""
+            for header in headers:
+                if header["name"] == "Subject":
+                    subject = header["value"]
+                    break
+             
+            body = get_message_plain_text(payload)
+             
+            # Combine subject and body for the text feature
+            full_text = f"Subject: {subject}\n\n{body}".strip()
+             
+            if full_text: # Only add if there's actual content
+                email_data.append({"text": full_text, "label": label_name.lower()})
+            else:
+                print(f"Skipping empty or unreadable email ID: {msg['id']} from label '{label_name}'")
+
+        print(f"Finished fetching {len(email_data)} emails for label '{label_name}'.")
+        return email_data
+
+    except HttpError as error:
+        print(f"An error occurred: {error}")
+        return []
+
+# NEW FUNCTION to get 'Normal' emails based on a search query
+def get_normal_emails(service, max_results=500):
+    """
+    Fetches emails that are in the inbox, read, and have no user labels.
+    """
+    email_data = []
+    # This query finds all emails in the inbox that are read and have no user-defined labels
+    query = "in:inbox is:read has:nouserlabels"
+    
+    print(f"Fetching 'Normal' emails with query: '{query}'...")
+    
+    try:
+        # List messages matching the query
+        response = service.users().messages().list(
+            userId="me",
+            q=query,
+            maxResults=max_results
+        ).execute()
+        
+        messages = response.get("messages", [])
+        
+        if not messages:
+            print("No messages found matching the 'Normal' criteria.")
+            return []
+
+        for i, msg in enumerate(messages):
+            if (i + 1) % 50 == 0:
+                print(f"  Processed {i+1}/{len(messages)} 'Normal' emails...")
 
             msg_details = service.users().messages().get(userId="me", id=msg["id"], format="full").execute()
             
@@ -123,15 +180,15 @@ def get_emails_by_label(service, label_name, max_results=500):
             full_text = f"Subject: {subject}\n\n{body}".strip()
             
             if full_text: # Only add if there's actual content
-                email_data.append({"text": full_text, "label": label_name.lower()})
+                email_data.append({"text": full_text, "label": "normal"})
             else:
-                print(f"Skipping empty or unreadable email ID: {msg['id']} from label '{label_name}'")
+                print(f"Skipping empty or unreadable 'Normal' email ID: {msg['id']}")
 
-        print(f"Finished fetching {len(email_data)} emails for label '{label_name}'.")
+        print(f"Finished fetching {len(email_data)} 'Normal' emails.")
         return email_data
 
     except HttpError as error:
-        print(f"An error occurred: {error}")
+        print(f"An error occurred while fetching 'Normal' emails: {error}")
         return []
 
 def main():
@@ -140,18 +197,23 @@ def main():
         return
 
     all_email_data = []
-    labels_to_fetch = ["Applied", "Rejects"] # Make sure labels match.
+    # MODIFIED: List of labels to fetch by name
+    labels_to_fetch = ["Applied", "Rejects"]
 
     for label in labels_to_fetch:
-        data = get_emails_by_label(service, label, max_results=500) # Fetch up to 500 emails per label
+        data = get_emails_by_label(service, label, max_results=500)
         all_email_data.extend(data)
+    
+    # MODIFIED: Add the call to the new function for 'Normal' emails
+    normal_data = get_normal_emails(service, max_results=500)
+    all_email_data.extend(normal_data)
 
     if all_email_data:
         df = pd.DataFrame(all_email_data)
         output_filename = "data.csv"
         df.to_csv(output_filename, index=False)
-        print(f"\nSuccessfully gathered {len(df)} emails and saved to '{output_filename}'")
-        print("First 5 rows of the dataset:")
+        print(f"\nSuccessfully gathered a total of {len(df)} emails and saved to '{output_filename}'")
+        print("\nFirst 5 rows of the dataset:")
         print(df.head())
         print("\nLabel distribution:")
         print(df['label'].value_counts())
