@@ -1,5 +1,3 @@
-
-
 import os
 import base64
 import re
@@ -44,13 +42,13 @@ def get_gmail_service():
         return None
 
 
-def classify_email(text, model_path="fine_tuned_bert_classifier"):
+def classify_email(text):
     device = -1
     try:
         classifier = pipeline(
             "text-classification",
-            model=model_path,
-            tokenizer=model_path,
+            model="dedsec995/BERT_EMAIL_CLASSIFIER",
+            tokenizer="dedsec995/BERT_EMAIL_CLASSIFIER",
             device=device
         )
         cleared_text = clean_text(text)
